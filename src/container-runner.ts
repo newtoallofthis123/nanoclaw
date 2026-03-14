@@ -54,6 +54,7 @@ export interface ContainerInput {
   isScheduledTask?: boolean;
   assistantName?: string;
   hasProjectDir?: boolean;
+  images?: Array<{ base64: string; mediaType: string }>;
 }
 
 export interface ContainerOutput {
