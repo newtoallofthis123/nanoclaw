@@ -77,14 +77,17 @@ function buildVolumeMounts(
     });
 
     // Shadow .env so the agent cannot read secrets from the mounted project root.
-    // Credentials are injected by the credential proxy, never exposed to containers.
-    const envFile = path.join(projectRoot, '.env');
-    if (fs.existsSync(envFile)) {
-      mounts.push({
-        hostPath: '/dev/null',
-        containerPath: '/workspace/project/.env',
-        readonly: true,
-      });
+    // Apple Container: handled by mount --bind in the Dockerfile entrypoint (can't mount files).
+    // Docker: overlay /dev/null onto the .env file.
+    if (CONTAINER_RUNTIME_BIN !== 'container') {
+      const envFile = path.join(projectRoot, '.env');
+      if (fs.existsSync(envFile)) {
+        mounts.push({
+          hostPath: '/dev/null',
+          containerPath: '/workspace/project/.env',
+          readonly: true,
+        });
+      }
     }
 
     // Main also gets its group folder as the working directory
