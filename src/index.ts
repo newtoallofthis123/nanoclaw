@@ -55,7 +55,12 @@ import {
   shouldDropMessage,
 } from './sender-allowlist.js';
 import { startSchedulerLoop } from './task-scheduler.js';
-import { Channel, ContainerConfig, NewMessage, RegisteredGroup } from './types.js';
+import {
+  Channel,
+  ContainerConfig,
+  NewMessage,
+  RegisteredGroup,
+} from './types.js';
 import { logger } from './logger.js';
 
 // Re-export for backwards compatibility during refactor
@@ -73,7 +78,10 @@ const queue = new GroupQueue();
 /** Read groups/{folder}/config.json and merge containerConfig into the group. File values override DB. */
 function applyFileConfig(group: RegisteredGroup): void {
   try {
-    const configPath = path.join(resolveGroupFolderPath(group.folder), 'config.json');
+    const configPath = path.join(
+      resolveGroupFolderPath(group.folder),
+      'config.json',
+    );
     if (!fs.existsSync(configPath)) return;
     const fileConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
     if (fileConfig.containerConfig) {
@@ -83,7 +91,10 @@ function applyFileConfig(group: RegisteredGroup): void {
       };
     }
   } catch (err) {
-    logger.warn({ folder: group.folder, err }, 'Failed to read group config.json');
+    logger.warn(
+      { folder: group.folder, err },
+      'Failed to read group config.json',
+    );
   }
 }
 
@@ -188,8 +199,10 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   if (missedMessages.length === 0) return true;
 
   // /clear: reset session and shut down container
-  if (missedMessages.length === 1
-    && missedMessages[0].content.trim().toLowerCase() === '/clear') {
+  if (
+    missedMessages.length === 1 &&
+    missedMessages[0].content.trim().toLowerCase() === '/clear'
+  ) {
     delete sessions[group.folder];
     deleteSession(group.folder);
     queue.closeStdin(chatJid);
@@ -424,8 +437,9 @@ async function startMessageLoop(): Promise<void> {
           }
 
           // /clear: reset session and shut down container
-          const isClear = groupMessages.length === 1
-            && groupMessages[0].content.trim().toLowerCase() === '/clear';
+          const isClear =
+            groupMessages.length === 1 &&
+            groupMessages[0].content.trim().toLowerCase() === '/clear';
           if (isClear) {
             delete sessions[group.folder];
             deleteSession(group.folder);
