@@ -5,6 +5,7 @@ import fs from 'fs';
 import { ASSISTANT_NAME, SCHEDULER_POLL_INTERVAL, TIMEZONE } from './config.js';
 import {
   ContainerOutput,
+  hasProjectDir,
   runContainerAgent,
   writeTasksSnapshot,
 } from './container-runner.js';
@@ -179,6 +180,7 @@ async function runTask(
         isMain,
         isScheduledTask: true,
         assistantName: ASSISTANT_NAME,
+        hasProjectDir: hasProjectDir(group),
       },
       (proc, containerName) =>
         deps.onProcess(task.chat_jid, proc, containerName, task.group_folder),

@@ -28,6 +28,7 @@ export interface AllowedRoot {
 }
 
 export interface ContainerConfig {
+  projectDir?: string; // Host directory mounted at /workspace/project-dir (supports ~)
   additionalMounts?: AdditionalMount[];
   timeout?: number; // Default: 300000 (5 minutes)
 }

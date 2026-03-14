@@ -4,6 +4,7 @@
  */
 import { ChildProcess, exec, spawn } from 'child_process';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 import {
@@ -29,6 +30,16 @@ import { detectAuthMode } from './credential-proxy.js';
 import { validateAdditionalMounts } from './mount-security.js';
 import { RegisteredGroup } from './types.js';
 
+/** Resolve a projectDir path (expanding ~) and check if it exists on the host. */
+export function hasProjectDir(group: RegisteredGroup): boolean {
+  const dir = group.containerConfig?.projectDir;
+  if (!dir) return false;
+  const resolved = dir.startsWith('~')
+    ? path.join(os.homedir(), dir.slice(1))
+    : dir;
+  return fs.existsSync(resolved);
+}
+
 // Sentinel markers for robust output parsing (must match agent-runner)
 const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
 const OUTPUT_END_MARKER = '---NANOCLAW_OUTPUT_END---';
@@ -41,6 +52,7 @@ export interface ContainerInput {
   isMain: boolean;
   isScheduledTask?: boolean;
   assistantName?: string;
+  hasProjectDir?: boolean;
 }
 
 export interface ContainerOutput {
@@ -201,6 +213,20 @@ function buildVolumeMounts(
     containerPath: '/app/src',
     readonly: false,
   });
+
+  // Project directory: external host directory mounted as the agent's working directory
+  if (group.containerConfig?.projectDir) {
+    const projectDirHost = group.containerConfig.projectDir.startsWith('~')
+      ? path.join(os.homedir(), group.containerConfig.projectDir.slice(1))
+      : group.containerConfig.projectDir;
+    if (fs.existsSync(projectDirHost)) {
+      mounts.push({
+        hostPath: projectDirHost,
+        containerPath: '/workspace/project-dir',
+        readonly: false,
+      });
+    }
+  }
 
   // Additional mounts validated against external allowlist (tamper-proof from containers)
   if (group.containerConfig?.additionalMounts) {

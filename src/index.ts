@@ -17,6 +17,7 @@ import {
 } from './channels/registry.js';
 import {
   ContainerOutput,
+  hasProjectDir,
   runContainerAgent,
   writeGroupsSnapshot,
   writeTasksSnapshot,
@@ -27,6 +28,7 @@ import {
   PROXY_BIND_HOST,
 } from './container-runtime.js';
 import {
+  deleteSession,
   getAllChats,
   getAllRegisteredGroups,
   getAllSessions,
@@ -53,7 +55,7 @@ import {
   shouldDropMessage,
 } from './sender-allowlist.js';
 import { startSchedulerLoop } from './task-scheduler.js';
-import { Channel, NewMessage, RegisteredGroup } from './types.js';
+import { Channel, ContainerConfig, NewMessage, RegisteredGroup } from './types.js';
 import { logger } from './logger.js';
 
 // Re-export for backwards compatibility during refactor
@@ -68,6 +70,23 @@ let messageLoopRunning = false;
 const channels: Channel[] = [];
 const queue = new GroupQueue();
 
+/** Read groups/{folder}/config.json and merge containerConfig into the group. File values override DB. */
+function applyFileConfig(group: RegisteredGroup): void {
+  try {
+    const configPath = path.join(resolveGroupFolderPath(group.folder), 'config.json');
+    if (!fs.existsSync(configPath)) return;
+    const fileConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    if (fileConfig.containerConfig) {
+      group.containerConfig = {
+        ...group.containerConfig,
+        ...(fileConfig.containerConfig as ContainerConfig),
+      };
+    }
+  } catch (err) {
+    logger.warn({ folder: group.folder, err }, 'Failed to read group config.json');
+  }
+}
+
 function loadState(): void {
   lastTimestamp = getRouterState('last_timestamp') || '';
   const agentTs = getRouterState('last_agent_timestamp');
@@ -79,6 +98,9 @@ function loadState(): void {
   }
   sessions = getAllSessions();
   registeredGroups = getAllRegisteredGroups();
+  for (const group of Object.values(registeredGroups)) {
+    applyFileConfig(group);
+  }
   logger.info(
     { groupCount: Object.keys(registeredGroups).length },
     'State loaded',
@@ -102,6 +124,7 @@ function registerGroup(jid: string, group: RegisteredGroup): void {
     return;
   }
 
+  applyFileConfig(group);
   registeredGroups[jid] = group;
   setRegisteredGroup(jid, group);
 
@@ -163,6 +186,18 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   );
 
   if (missedMessages.length === 0) return true;
+
+  // /clear: reset session and shut down container
+  if (missedMessages.length === 1
+    && missedMessages[0].content.trim().toLowerCase() === '/clear') {
+    delete sessions[group.folder];
+    deleteSession(group.folder);
+    queue.closeStdin(chatJid);
+    lastAgentTimestamp[chatJid] = missedMessages[0].timestamp;
+    saveState();
+    await channel.sendMessage(chatJid, 'Session cleared.');
+    return true;
+  }
 
   // For non-main groups, check if trigger is required and present
   if (!isMainGroup && group.requiresTrigger !== false) {
@@ -315,6 +350,7 @@ async function runAgent(
         chatJid,
         isMain,
         assistantName: ASSISTANT_NAME,
+        hasProjectDir: hasProjectDir(group),
       },
       (proc, containerName) =>
         queue.registerProcess(chatJid, proc, containerName, group.folder),
@@ -384,6 +420,19 @@ async function startMessageLoop(): Promise<void> {
           const channel = findChannel(channels, chatJid);
           if (!channel) {
             logger.warn({ chatJid }, 'No channel owns JID, skipping messages');
+            continue;
+          }
+
+          // /clear: reset session and shut down container
+          const isClear = groupMessages.length === 1
+            && groupMessages[0].content.trim().toLowerCase() === '/clear';
+          if (isClear) {
+            delete sessions[group.folder];
+            deleteSession(group.folder);
+            queue.closeStdin(chatJid);
+            lastAgentTimestamp[chatJid] = groupMessages[0].timestamp;
+            saveState();
+            await channel.sendMessage(chatJid, 'Session cleared.');
             continue;
           }
 
