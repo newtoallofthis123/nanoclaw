@@ -13,6 +13,7 @@ import {
   CONTAINER_TIMEOUT,
   CREDENTIAL_PROXY_PORT,
   DATA_DIR,
+  EXECUTE_MCP_PORT,
   GROUPS_DIR,
   IDLE_TIMEOUT,
   TIMEZONE,
@@ -255,6 +256,12 @@ function buildContainerArgs(
   args.push(
     '-e',
     `ANTHROPIC_BASE_URL=http://${CONTAINER_HOST_GATEWAY}:${CREDENTIAL_PROXY_PORT}`,
+  );
+
+  // Route execute MCP traffic through the host's execute MCP server
+  args.push(
+    '-e',
+    `EXECUTE_MCP_URL=http://${CONTAINER_HOST_GATEWAY}:${EXECUTE_MCP_PORT}/mcp`,
   );
 
   // Mirror the host's auth method with a placeholder value.
